@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>siriii ：） Dashboard Pro</title>
+    
+    <!-- 引入图表库和Excel导出库 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <style>
+        /* ================= 基础重置与变量 ================= */
+        :root {
+            --bg-color: #fdfbfb;
+            --sidebar-bg: #ffe4e8;
+            --card-bg: #ffffff;
+            --primary-color: #ff8ca3;
+            --secondary-color: #ffb6c1;
+            --text-main: #555555;
+            --text-light: #888888;
+            --border-color: #ffdae0;
+            --shadow: 0 8px 25px rgba(255, 140, 163, 0.12);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Nunito', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+        }
+
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--secondary-color); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--primary-color); }
+
+        /* ================= 侧边栏 ================= */
+        .sidebar {
+            width: 320px;
+            background-color: var(--sidebar-bg);
+            padding: 25px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            box-shadow: 2px 0 15px rgba(0,0,0,0.03);
+            z-index: 10;
+        }
+
+        .logo {
+            display: flex; align-items: center; gap: 12px;
+            font-size: 24px; font-weight: 900; color: var(--primary-color);
+            font-family: 'Comic Sans MS', cursive, sans-serif;
+        }
+
+        .sidebar-module {
+            background: rgba(255, 255, 255, 0.6);
+            border-radius: 20px; padding: 20px;
+            box-shadow: 0 4px 15px rgba(255, 182, 193, 0.1);
+        }
+
+        /* 月日历 */
+        .cal-header { display: flex; justify-content: space-between; align-items: center; font-weight: bold; margin-bottom: 15px; color: var(--primary-color); }
+        .cal-header button { background: none; border: none; cursor: pointer; font-size: 18px; color: var(--primary-color); }
+        .cal-week { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 13px; color: var(--text-light); margin-bottom: 10px; }
+        .cal-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; text-align: center; }
+        .cal-day { padding: 8px 0; border-radius: 10px; cursor: pointer; font-size: 14px; }
+        .cal-day:hover:not(.empty) { background: white; }
+        .cal-day.selected { background: var(--primary-color); color: white; font-weight: bold; }
+        .cal-day.today { border: 1px dashed var(--primary-color); }
+
+        /* 收支 */
+        .module-title { font-weight: bold; margin-bottom: 12px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+        .fin-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 14px; }
+        .fin-row input { width: 90px; padding: 6px; border: none; border-radius: 8px; text-align: right; outline: none; }
+        .fin-divider { height: 1px; background: var(--border-color); margin: 12px 0; }
+        .total-row { font-weight: bold; color: var(--primary-color); }
+        .total-row span.highlight { font-size: 18px; }
+
+        /* 导出按钮 */
+        .export-btn {
+            background: white; border: 2px dashed var(--primary-color);
+            color: var(--primary-color); padding: 12px; border-radius: 15px;
+            text-align: center; font-weight: bold; cursor: pointer; transition: 0.3s;
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            margin-top: auto;
+        }
+        .export-btn:hover { background: var(--primary-color); color: white; border-style: solid; }
+
+        /* ================= 主内容区 (四宫格) ================= */
+        .main-content {
+            flex: 1; padding: 20px 25px;
+            display: grid; 
+            grid-template-columns: 1.5fr 1fr; 
+            grid-template-rows: 55fr 45fr; 
+            gap: 20px; overflow-y: auto;
+        }
+
+        .box-card {
+            background: var(--card-bg); border-radius: 20px; padding: 20px;
+            box-shadow: var(--shadow); display: flex; flex-direction: column; overflow: hidden; position: relative;
+        }
+        .box-title { font-size: 16px; font-weight: bold; color: var(--text-main); margin-bottom: 15px; display: flex; align-items: center; justify-content: space-between; gap: 8px;}
+
+        /* 左上：数据记录 */
+        .table-container { flex: 1; overflow-y: auto; padding-right: 5px; }
+        .cute-table { width: 100%; border-collapse: collapse; }
+        .cute-table th { text-align: left; padding: 8px 4px; color: var(--text-light); font-weight: normal; border-bottom: 2px solid var(--border-color); position: sticky; top: 0; background: var(--card-bg); z-index: 1; font-size: 13px;}
+        .cute-table td { padding: 6px 4px; border-bottom: 1px dashed var(--border-color); }
+        .cute-table input { width: 100%; padding: 6px; border: none; border-radius: 6px; background: #fdfafb; outline: none; font-size: 13px; }
+        .cute-table input[type="number"] { text-align: center; }
+        .cute-table input:focus { background: var(--sidebar-bg); }
+        .subtotal { font-weight: bold; color: var(--primary-color); text-align: center; font-size: 14px;}
+        
+        .table-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
+        .total-score { font-size: 14px; font-weight: bold; }
+        .total-score span { color: var(--primary-color); font-size: 18px; }
+
+        /* 右上：每日任务 */
+        .task-input-row { display: flex; gap: 8px; margin-bottom: 10px; }
+        .task-input-row input { flex: 1; padding: 8px 12px; border: none; border-radius: 20px; background: #f5f5f5; outline: none; }
+        .task-list { flex: 1; overflow-y: auto; list-style: none; }
+        .task-item { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px dashed var(--border-color); font-size: 14px; }
+        .task-label { display: flex; align-items: center; gap: 10px; cursor: pointer; flex: 1; }
+        .task-label input[type="checkbox"] { accent-color: var(--primary-color); }
+        .task-item.completed .task-text { text-decoration: line-through; color: #bbb; }
+
+        /* 左下：实时统计模块 */
+        .stats-summary { display: flex; gap: 10px; margin-bottom: 15px; }
+        .stat-box { flex: 1; background: #fff5f7; border-radius: 12px; padding: 10px 8px; text-align: center; }
+        .stat-box .stat-label { font-size: 11px; color: var(--text-light); }
+        .stat-box .stat-val { font-size: 18px; font-weight: bold; color: var(--primary-color); margin-top: 4px; }
+        
+        /* 统计切换按钮 */
+        .stat-tabs { display: flex; gap: 4px; }
+        .stat-tab { background: #f5f5f5; border: none; padding: 3px 10px; border-radius: 8px; cursor: pointer; color: var(--text-light); font-weight: bold; font-size: 12px; transition: 0.2s; }
+        .stat-tab:hover { background: #ffe4e8; color: var(--primary-color); }
+        .stat-tab.active { background: var(--primary-color); color: white; }
+
+        .chart-container { flex: 1; position: relative; min-height: 0; }
+
+        /* 右下：小记 */
+        .notes-textarea { flex: 1; border: none; resize: none; background: #fdfafb; border-radius: 16px; padding: 15px; font-size: 14px; outline: none; line-height: 1.6; }
+        .deco-cat { position: absolute; right: 15px; bottom: 10px; opacity: 0.6; pointer-events: none; }
+
+        /* 按钮 */
+        .cute-btn { background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%); color: white; border: none; border-radius: 20px; padding: 6px 14px; cursor: pointer; font-weight: bold; font-size: 13px; }
+        .del-btn { background: none; border: none; color: #ffb6c1; cursor: pointer; font-size: 14px; }
+    </style>
+</head>
+<body>
+
+    <!-- 侧边栏 -->
+    <aside class="sidebar">
+        <div class="logo">
+            siriii ：）
+            <svg width="35" height="35" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="45" fill="#ffe4e1"/>
+                <path d="M 30 40 L 20 20 L 45 35 Z" fill="#ff8ca3"/>
+                <path d="M 70 40 L 80 20 L 55 35 Z" fill="#ff8ca3"/>
+                <circle cx="35" cy="55" r="5" fill="#555"/>
+                <circle cx="65" cy="55" r="5" fill="#555"/>
+                <path d="M 45 65 Q 50 70 55 65" stroke="#555" stroke-width="3" fill="none" stroke-linecap="round"/>
+            </svg>
+        </div>
+
+        <div class="sidebar-module">
+            <div class="cal-header">
+                <button onclick="changeMonth(-1)">❮</button>
+                <span id="calendar-month">2026年 8月</span>
+                <button onclick="changeMonth(1)">❯</button>
+            </div>
+            <div class="cal-week">
+                <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
+            </div>
+            <div class="cal-days" id="calendar-days"></div>
+        </div>
+
+        <div class="sidebar-module">
+            <div class="module-title">🌸 目前收支情况</div>
+            <div class="fin-row"><span>入账 (￥)</span><input type="number" id="fin-income" value="0" oninput="updateFinance()"></div>
+            <div class="fin-row"><span>还债 (￥)</span><input type="number" id="fin-debt" value="0" oninput="updateFinance()"></div>
+            <div class="fin-divider"></div>
+            <div class="fin-row total-row"><span>资产情况</span><span id="fin-assets" class="highlight">0.00</span></div>
+        </div>
+
+        <div class="export-btn" onclick="exportToExcel()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+            导出 Excel 数据包
+        </div>
+    </aside>
+
+    <!-- 主区 -->
+    <main class="main-content">
+        <!-- 1. 积分记录 (左上) -->
+        <section class="box-card">
+            <div class="box-title">
+                <span>📊 积分数据记录</span>
+                <span id="current-date-display" style="font-size: 13px; color: var(--text-light); font-weight: normal;"></span>
+            </div>
+            <div class="table-container">
+                <table class="cute-table">
+                    <thead>
+                        <tr>
+                            <th>专项 (Task)</th>
+                            <th width="65">时长(分)</th>
+                            <th width="55">积分</th>
+                            <th width="55">数量</th>
+                            <th width="45">小计</th>
+                            <th width="25"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="record-tbody"></tbody>
+                </table>
+            </div>
+            <div class="table-footer">
+                <button onclick="addRecord()" class="cute-btn">➕ 新增</button>
+                <div class="total-score">
+                    今日：<span id="daily-total-points">0</span> 分 &nbsp;|&nbsp; <span id="daily-total-duration">0</span> 分钟
+                </div>
+            </div>
+        </section>
+
+        <!-- 2. 每日任务 (右上) -->
+        <section class="box-card">
+            <div class="box-title"><span>🎯 每日任务</span></div>
+            <div class="task-input-row">
+                <input type="text" id="new-task-input" placeholder="准备做些什么呢？🐾" onkeypress="if(event.key==='Enter') addTask()">
+                <button onclick="addTask()" class="cute-btn">添加</button>
+            </div>
+            <ul id="task-list" class="task-list"></ul>
+        </section>
+
+        <!-- 3. 统计分析 (左下) -->
+        <section class="box-card">
+            <div class="box-title">
+                <span>📈 统计分析</span>
+                <div class="stat-tabs">
+                    <button class="stat-tab active" data-mode="day" onclick="setStatMode('day')">日</button>
+                    <button class="stat-tab" data-mode="week" onclick="setStatMode('week')">周</button>
+                    <button class="stat-tab" data-mode="month" onclick="setStatMode('month')">月</button>
+                    <button class="stat-tab" data-mode="year" onclick="setStatMode('year')">年</button>
+                </div>
+            </div>
+            <div class="stats-summary">
+                <div class="stat-box">
+                    <div class="stat-label">历史总积分</div>
+                    <div class="stat-val" id="stat-all-points">0</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">完成任务数</div>
+                    <div class="stat-val" id="stat-all-tasks">0</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">累计学习时长</div>
+                    <div class="stat-val" id="stat-all-duration">0h</div>
+                </div>
+            </div>
+            <div class="chart-container">
+                <canvas id="trendChart"></canvas>
+            </div>
+        </section>
+
+        <!-- 4. 小记 (右下) -->
+        <section class="box-card notes-card">
+            <div class="box-title"><span>📝 每日小记</span></div>
+            <textarea id="notes-textarea" class="notes-textarea" placeholder="今天发生了什么有趣的事情呢？ฅ^•ﻌ•^ฅ" oninput="updateNotes()"></textarea>
+            <svg class="deco-cat" width="70" height="70" viewBox="0 0 100 100">
+                <ellipse cx="50" cy="70" rx="35" ry="20" fill="#ffd1dc"/>
+                <circle cx="30" cy="60" r="15" fill="#ffd1dc"/>
+                <path d="M 20 55 L 12 40 L 28 50 Z" fill="#ffb6c1"/>
+                <path d="M 40 55 L 48 40 L 37 47 Z" fill="#ffb6c1"/>
+                <path d="M 22 62 Q 25 65 28 62" stroke="#555" stroke-width="2" fill="none"/>
+                <path d="M 32 62 Q 35 65 38 62" stroke="#555" stroke-width="2" fill="none"/>
+            </svg>
+        </section>
+    </main>
+
+    <script>
+        const today = new Date();
+        let currentYear = today.getFullYear();
+        let currentMonth = today.getMonth();
+        let selectedDateStr = formatDate(today);
+        let currentStatMode = 'day'; // 'day', 'week', 'month', 'year'
+        let myChart = null;
+
+        const defaultRecords = [
+            { task: '完整正课+随堂笔记整理', duration: '', points: 20, qty: 0 },
+            { task: '课后作业完成+订正复盘', duration: '', points: 5, qty: 0 },
+            { task: '课文/对话流利背诵', duration: '', points: 10, qty: 0 },
+            { task: '动词变位专项练习', duration: '', points: 5, qty: 0 },
+            { task: '多邻国打卡', duration: '', points: 5, qty: 0 },
+            { task: '单词背诵', duration: '', points: 10, qty: 0 },
+            { task: '出方案', duration: '', points: 10, qty: 0 },
+            { task: '数据统计分析+图表输出', duration: '', points: 10, qty: 0 },
+            { task: '专业理论/案例整理', duration: '', points: 2, qty: 0 },
+            { task: '植物认知+习性整理', duration: '', points: 2, qty: 0 },
+            { task: '管理学网课', duration: '', points: 10, qty: 0 },
+            { task: '规律作息（23：00睡，7：30起）', duration: '', points: 10, qty: 0 },
+            { task: '有效运动（30分钟以上）', duration: '', points: 10, qty: 0 },
+            { task: '健康饮食（三餐规律、避重油重糖）', duration: '', points: 10, qty: 0 },
+            { task: '早晚全套护肤护理', duration: '', points: 5, qty: 0 },
+            { task: '深度社交/亲友有效沟通', duration: '', points: 5, qty: 0 },
+            { task: '及时记录刷视频看到的内容', duration: '', points: 10, qty: 0 },
+            { task: '出行不做低头族', duration: '', points: 5, qty: 0 },
+            { task: '家务打扫/收纳整理', duration: '', points: 5, qty: 0 },
+            { task: '兼职', duration: '', points: 5, qty: 0 },
+            { task: '互联网研究', duration: '', points: 5, qty: 0 },
+            { task: '单日任务规划', duration: '', points: 5, qty: 0 },
+            { task: '周度总复盘+下周规划', duration: '', points: 15, qty: 0 },
+            { task: '单日深度学习180min：10分；满240min：15分', duration: '', points: 10, qty: 0 }
+        ];
+
+        let db = { finance: { income: 0, debt: 0 }, days: {} };
+
+        function formatDate(date) {
+            return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        }
+
+        function loadDB() {
+            const stored = localStorage.getItem('siriii_db_v4');
+            if (stored) db = JSON.parse(stored);
+        }
+
+        function saveDB() {
+            localStorage.setItem('siriii_db_v4', JSON.stringify(db));
+            updateRealTimeStats();
+        }
+
+        function getDayData(dateStr) {
+            if (!db.days[dateStr]) {
+                db.days[dateStr] = { records: JSON.parse(JSON.stringify(defaultRecords)), tasks: [], notes: '' };
+            }
+            return db.days[dateStr];
+        }
+
+        function parseDurationToMinutes(val) {
+            if (val === '' || val === null || val === undefined) return 0;
+            let num = parseFloat(val);
+            return isNaN(num) ? 0 : num;
+        }
+
+        function getRecordMinutes(r) {
+            const mins = parseDurationToMinutes(r.duration);
+            if (mins <= 0) return 0;
+            const multiplier = (r.qty > 0) ? r.qty : 1;
+            return mins * multiplier;
+        }
+
+        function getMonday(d) {
+            d = new Date(d);
+            var day = d.getDay(),
+                diff = d.getDate() - day + (day == 0 ? -6 : 1);
+            return new Date(d.setDate(diff));
+        }
+
+        function setStatMode(mode) {
+            currentStatMode = mode;
+            document.querySelectorAll('.stat-tab').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.mode === mode);
+            });
+            updateRealTimeStats();
+        }
+
+        function renderCalendar(year, month) {
+            document.getElementById('calendar-month').innerText = `${year}年 ${month + 1}月`;
+            const grid = document.getElementById('calendar-days');
+            grid.innerHTML = '';
+            const firstDay = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            
+            for (let i = 0; i < firstDay; i++) grid.innerHTML += `<div class="cal-day empty"></div>`;
+            for (let i = 1; i <= daysInMonth; i++) {
+                const dateVal = `${year}-${String(month+1).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
+                let cls = 'cal-day';
+                if (dateVal === selectedDateStr) cls += ' selected';
+                if (dateVal === formatDate(new Date())) cls += ' today';
+                const div = document.createElement('div');
+                div.className = cls; div.innerText = i;
+                div.onclick = () => { selectedDateStr = dateVal; renderCalendar(year, month); loadDateData(); };
+                grid.appendChild(div);
+            }
+        }
+
+        function changeMonth(dir) {
+            currentMonth += dir;
+            if (currentMonth < 0) { currentMonth = 11; currentYear--; }
+            else if (currentMonth > 11) { currentMonth = 0; currentYear++; }
+            renderCalendar(currentYear, currentMonth);
+        }
+
+        function initFinance() {
+            document.getElementById('fin-income').value = db.finance.income || 0;
+            document.getElementById('fin-debt').value = db.finance.debt || 0;
+            updateFinance(false);
+        }
+
+        function updateFinance(save = true) {
+            const inc = parseFloat(document.getElementById('fin-income').value) || 0;
+            const debt = parseFloat(document.getElementById('fin-debt').value) || 0;
+            document.getElementById('fin-assets').innerText = (inc - debt).toFixed(2);
+            if (save) { db.finance.income = inc; db.finance.debt = debt; saveDB(); }
+        }
+
+        function renderRecords() {
+            const data = getDayData(selectedDateStr);
+            const tbody = document.getElementById('record-tbody');
+            tbody.innerHTML = '';
+            
+            data.records.forEach((rec, i) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><input type="text" value="${rec.task}" onchange="updateRecord(${i}, 'task', this.value)"></td>
+                    <td><input type="number" value="${rec.duration ?? ''}" onchange="updateRecord(${i}, 'duration', this.value)"></td>
+                    <td><input type="number" value="${rec.points}" onchange="updateRecord(${i}, 'points', this.value)"></td>
+                    <td><input type="number" value="${rec.qty}" onchange="updateRecord(${i}, 'qty', this.value)"></td>
+                    <td class="subtotal">${rec.points * rec.qty}</td>
+                    <td><button class="del-btn" onclick="delRecord(${i})">✖</button></td>
+                `;
+                tbody.appendChild(tr);
+            });
+            updateTotals();
+        }
+
+        function updateRecord(idx, field, val) {
+            const rec = getDayData(selectedDateStr).records[idx];
+            if(field === 'task') {
+                rec[field] = val;
+            } else { 
+                rec[field] = parseFloat(val) || 0; 
+            }
+            saveDB(); renderRecords();
+        }
+
+        function delRecord(idx) { getDayData(selectedDateStr).records.splice(idx, 1); saveDB(); renderRecords(); }
+        function addRecord() { getDayData(selectedDateStr).records.push({ task: '新专项', duration: '', points: 1, qty: 1 }); saveDB(); renderRecords(); 
+            const c = document.querySelector('.table-container'); c.scrollTop = c.scrollHeight;
+        }
+
+        function updateTotals() {
+            const records = getDayData(selectedDateStr).records;
+            let totalPoints = 0;
+            let totalMins = 0;
+            records.forEach(r => {
+                totalPoints += (r.points * r.qty);
+                totalMins += getRecordMinutes(r);
+            });
+            document.getElementById('daily-total-points').innerText = totalPoints;
+            document.getElementById('daily-total-duration').innerText = totalMins;
+        }
+
+        function renderTasks() {
+            const data = getDayData(selectedDateStr);
+            const ul = document.getElementById('task-list');
+            ul.innerHTML = '';
+            data.tasks.forEach((t, i) => {
+                const li = document.createElement('li');
+                li.className = `task-item ${t.completed ? 'completed' : ''}`;
+                li.innerHTML = `
+                    <label class="task-label">
+                        <input type="checkbox" ${t.completed?'checked':''} onchange="toggleTask(${i}, this.checked)">
+                        <span class="task-text">${t.text}</span>
+                    </label>
+                    <button class="del-btn" onclick="delTask(${i})">✖</button>
+                `;
+                ul.appendChild(li);
+            });
+        }
+        function toggleTask(i, status) { getDayData(selectedDateStr).tasks[i].completed = status; saveDB(); renderTasks(); }
+        function delTask(i) { getDayData(selectedDateStr).tasks.splice(i, 1); saveDB(); renderTasks(); }
+        function addTask() {
+            const el = document.getElementById('new-task-input');
+            if(el.value.trim()) { getDayData(selectedDateStr).tasks.push({text: el.value.trim(), completed: false}); el.value = ''; saveDB(); renderTasks(); }
+        }
+        function updateNotes() { getDayData(selectedDateStr).notes = document.getElementById('notes-textarea').value; saveDB(); }
+
+        function loadDateData() {
+            document.getElementById('current-date-display').innerText = selectedDateStr;
+            renderRecords(); renderTasks();
+            document.getElementById('notes-textarea').value = getDayData(selectedDateStr).notes;
+        }
+
+        function updateRealTimeStats() {
+            let totalAllPoints = 0;
+            let totalAllTasks = 0;
+            let totalAllMinutes = 0;
+
+            let dayMap = {};
+            let weekMap = {};
+            let monthMap = {};
+            let yearMap = {};
+
+            for (let dateStr in db.days) {
+                const dData = db.days[dateStr];
+                const dateObj = new Date(dateStr);
+                if (isNaN(dateObj)) continue;
+
+                let dayPts = 0;
+                let dayMins = 0;
+                dData.records.forEach(r => {
+                    dayPts += (r.points * r.qty);
+                    dayMins += getRecordMinutes(r);
+                });
+                const dayTasks = dData.tasks.filter(t => t.completed).length;
+
+                totalAllPoints += dayPts;
+                totalAllTasks += dayTasks;
+                totalAllMinutes += dayMins;
+
+                dayMap[dateStr] = (dayMap[dateStr] || 0) + dayPts;
+
+                let mon = getMonday(dateObj);
+                let wKey = formatDate(mon);
+                weekMap[wKey] = (weekMap[wKey] || 0) + dayPts;
+
+                let mKey = `${dateObj.getFullYear()}-${String(dateObj.getMonth()+1).padStart(2,'0')}`;
+                monthMap[mKey] = (monthMap[mKey] || 0) + dayPts;
+
+                let yKey = `${dateObj.getFullYear()}`;
+                yearMap[yKey] = (yearMap[yKey] || 0) + dayPts;
+            }
+
+            document.getElementById('stat-all-points').innerText = totalAllPoints;
+            document.getElementById('stat-all-tasks').innerText = totalAllTasks;
+            document.getElementById('stat-all-duration').innerText = (totalAllMinutes / 60).toFixed(1) + 'h';
+
+            let labels = [];
+            let chartData = [];
+
+            if (currentStatMode === 'day') {
+                for (let i = 9; i >= 0; i--) {
+                    const d = new Date();
+                    d.setDate(today.getDate() - i);
+                    const dStr = formatDate(d);
+                    labels.push(`${d.getMonth()+1}/${d.getDate()}`);
+                    chartData.push(dayMap[dStr] || 0);
+                }
+            } else if (currentStatMode === 'week') {
+                let currentMon = getMonday(today);
+                let weeks = [];
+                for (let i = 7; i >= 0; i--) {
+                    let m = new Date(currentMon);
+                    m.setDate(m.getDate() - (i * 7));
+                    weeks.push(m);
+                }
+                weeks.forEach(m => {
+                    let wKey = formatDate(m);
+                    labels.push(`${m.getMonth()+1}/${m.getDate()}周`);
+                    chartData.push(weekMap[wKey] || 0);
+                });
+            } else if (currentStatMode === 'month') {
+                let curYear = today.getFullYear();
+                let curMonth = today.getMonth();
+                let months = [];
+                for (let i = 11; i >= 0; i--) {
+                    let y = curYear;
+                    let mo = curMonth - i;
+                    while (mo < 0) { mo += 12; y--; }
+                    months.push({ year: y, month: mo });
+                }
+                months.forEach(item => {
+                    let mKey = `${item.year}-${String(item.month+1).padStart(2,'0')}`;
+                    labels.push(`${item.year}年${item.month+1}月`);
+                    chartData.push(monthMap[mKey] || 0);
+                });
+            } else if (currentStatMode === 'year') {
+                let curYear = today.getFullYear();
+                let years = [];
+                for (let i = 4; i >= 0; i--) {
+                    years.push(curYear - i);
+                }
+                years.forEach(y => {
+                    let yKey = `${y}`;
+                    labels.push(`${y}年`);
+                    chartData.push(yearMap[yKey] || 0);
+                });
+            }
+
+            if (myChart) {
+                myChart.data.labels = labels;
+                myChart.data.datasets[0].data = chartData;
+                myChart.update();
+            } else {
+                const ctx = document.getElementById('trendChart').getContext('2d');
+                myChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: '积分',
+                            data: chartData,
+                            backgroundColor: '#ffb6c1',
+                            borderRadius: 6
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            y: { beginAtZero: true, grid: { color: '#ffdae0' } },
+                            x: { grid: { display: false } }
+                        }
+                    }
+                });
+            }
+        }
+
+        function exportToExcel() {
+            const summaryData = [];
+            const detailData = [];
+            
+            Object.keys(db.days).sort().forEach(date => {
+                const data = db.days[date];
+                let dailyPoints = 0;
+                let dailyMinutes = 0;
+                let completedTasks = data.tasks.filter(t => t.completed).length;
+                
+                data.records.forEach(r => {
+                    const itemMins = getRecordMinutes(r);
+                    const itemPts = r.points * r.qty;
+                    if (itemPts > 0 || itemMins > 0 || r.qty > 0) {
+                        dailyPoints += itemPts;
+                        dailyMinutes += itemMins;
+                        detailData.push({
+                            '日期': date,
+                            '专项任务': r.task,
+                            '学习时长(分钟)': r.duration || 0,
+                            '单项积分': r.points,
+                            '完成次数': r.qty,
+                            '得分小计': itemPts
+                        });
+                    }
+                });
+                
+                if (dailyPoints > 0 || dailyMinutes > 0 || data.tasks.length > 0 || data.notes) {
+                    summaryData.push({
+                        '日期': date,
+                        '当日总积分': dailyPoints,
+                        '当日总时长(分钟)': dailyMinutes,
+                        '完成日常任务数': completedTasks,
+                        '每日小记': data.notes
+                    });
+                }
+            });
+            
+            if(summaryData.length === 0) { alert("目前还没有任何数据可以导出哦~"); return; }
+
+            const wb = XLSX.utils.book_new();
+            const wsSummary = XLSX.utils.json_to_sheet(summaryData);
+            const wsDetail = XLSX.utils.json_to_sheet(detailData);
+            
+            wsSummary['!cols'] = [{wch:12}, {wch:12}, {wch:15}, {wch:15}, {wch:50}];
+            wsDetail['!cols'] = [{wch:12}, {wch:30}, {wch:15}, {wch:10}, {wch:10}, {wch:10}];
+
+            XLSX.utils.book_append_sheet(wb, wsSummary, "每日总览");
+            XLSX.utils.book_append_sheet(wb, wsDetail, "细则");
+            
+            const fileName = `siriii_学习记录数据包_${formatDate(new Date())}.xlsx`;
+            XLSX.writeFile(wb, fileName);
+        }
+
+        window.onload = () => {
+            loadDB();
+            initFinance();
+            renderCalendar(currentYear, currentMonth);
+            loadDateData();
+            updateRealTimeStats();
+        };
+    </script>
+</body>
+</html>
